@@ -1,10 +1,10 @@
 {
-  "name": "plugin-template",
+  "name": "plugin-box",
   "build": {
     "context": ".",
     "dockerfile": "Dockerfile"
   },
-  "workspaceFolder": "/workspaces/plugin-template",
+  "workspaceFolder": "/workspaces/plugin-box",
   "forwardPorts": [8080],
   "customizations": {
     "vscode": {

@@ -1,7 +1,7 @@
-group: io.kestra.plugin.templates
-name: "template"
-title: "Template"
-description: "Plugin template for Kestra"
+group: io.kestra.plugin.box
+name: "box"
+title: "Box"
+description: "Box plugin for Kestra"
 body: ""
 videos: []
 createdBy: "Kestra Core Team"
