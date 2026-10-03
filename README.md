@@ -109,7 +109,7 @@ The tests use a fake Box client, so no credentials are needed in CI.
 ## Running Kestra locally with this plugin
 
 1. Build the shadow JAR: `./gradlew shadowJar`. The output lands in `build/libs/`.
-2. Run `docker compose up`. `docker-compose.yml` builds `kestra/kestra:latest` and mounts `build/libs/` to `/app/plugins/`, so Kestra picks up the jar on startup. Kestra serves its UI from the same container.
+2. Run `docker compose up`. `docker-compose.yml` builds the Kestra image pinned in `Dockerfile` and mounts `build/libs/` to `/app/plugins/`, so Kestra picks up the jar on startup. Kestra serves its UI from the same container.
 3. Open the Kestra UI at [localhost:8080](http://localhost:8080). The Box plugin appears under Plugins, and its tasks are available in the flow editor.
 4. After changing code, rebuild with `./gradlew shadowJar` and restart with `docker compose restart`.
 
