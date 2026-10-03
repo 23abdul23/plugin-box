@@ -52,7 +52,6 @@ public class UploadTest {
         RunContext runContext = runContextFactory.of();
         URI source = runContext.storage().putFile(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)), "report.csv");
 
-        // fake SDK answer: Files{entries=[FileFull{id=42, name=report.csv}]}
         FileFull uploaded = mock(FileFull.class);
         when(uploaded.getId()).thenReturn("42");
         when(uploaded.getName()).thenReturn("report.csv");
@@ -76,7 +75,7 @@ public class UploadTest {
         assertThat(output.getFile().getId(), is("42"));
         assertThat(output.getFile().getName(), is("report.csv"));
 
-        // check what was really sent to Box: file name and parent folder
+        // what was actually sent to Box
         ArgumentCaptor<UploadFileRequestBody> sent = ArgumentCaptor.forClass(UploadFileRequestBody.class);
         verify(uploads).uploadFile(sent.capture());
         assertThat(sent.getValue().getAttributes().getName(), is("report.csv"));

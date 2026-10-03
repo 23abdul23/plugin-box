@@ -1,6 +1,9 @@
 package io.kestra.plugin.box.search;
 
-import java.net.URI;
+import java.util.ArrayList;
+
+import com.box.sdkgen.client.BoxClient;
+import com.box.sdkgen.managers.search.SearchForContentQueryParams;
 
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
@@ -11,6 +14,7 @@ import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.box.AbstractBoxTask;
 import io.kestra.plugin.box.models.BoxItem;
+import io.kestra.plugin.box.models.FetchOutput;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -21,8 +25,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-// TODO(you): implement run() AFTER folders.List. The fetchType switch is identical, so move it into a shared helper
-// instead of copy-pasting (e.g. a package-private static method in io.kestra.plugin.box.models).
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)
@@ -55,7 +57,7 @@ import lombok.experimental.SuperBuilder;
         )
     }
 )
-public class Search extends AbstractBoxTask implements RunnableTask<Search.Output> {
+public class Search extends AbstractBoxTask implements RunnableTask<FetchOutput> {
 
     @Schema(title = "Search query")
     @NotNull
@@ -63,11 +65,11 @@ public class Search extends AbstractBoxTask implements RunnableTask<Search.Outpu
     private Property<String> query;
 
     @Schema(title = "File extensions", description = "Only return files with these extensions, e.g. `pdf`, `csv`.")
-    @PluginProperty(group = "filters")
+    @PluginProperty(group = "advanced")
     private Property<java.util.List<String>> fileExtensions;
 
     @Schema(title = "Owner user IDs", description = "Only return content owned by these Box users.")
-    @PluginProperty(group = "filters")
+    @PluginProperty(group = "advanced")
     private Property<java.util.List<String>> ownerUserIds;
 
     @Schema(title = "Fetch strategy", description = "`FETCH_ONE`, `FETCH` (default) or `STORE`, same as `folders.List`.")
@@ -76,36 +78,40 @@ public class Search extends AbstractBoxTask implements RunnableTask<Search.Outpu
     private Property<FetchType> fetchType = Property.ofValue(FetchType.FETCH);
 
     @Override
-    public Output run(RunContext runContext) throws Exception {
-        // 1. render query; for the two lists use runContext.render(prop).asList(String.class) (empty list if unset)
-        // 2. BoxClient client = client(runContext);
-        // 3. page with OFFSET pagination (search has no marker):
-        //      long offset = 0;
-        //      var params = new SearchForContentQueryParams.Builder()
-        //          .query(rQuery).fileExtensions(rExt).ownerUserIds(rOwners).limit(200L).offset(offset).build();
-        //      var response = client.getSearch().searchForContent(params);
-        //      var results = response.getSearchResults();            // OneOfTwo: use getSearchResults()
-        //      results.getEntries() -> List<SearchResultItem> -> BoxItem.of(item)
-        //      next page: offset += entries.size(); stop when entries is empty or offset >= results.getTotalCount()
-        //    SearchForContentQueryParams is in com.box.sdkgen.managers.search
-        //    Careful: pass null (not an empty list) for filters the user did not set, or Box may reject the request.
-        // 4. same fetchType switch as folders.List -> rows / row / uri, always size
-        throw new UnsupportedOperationException("TODO");
+    public FetchOutput run(RunContext runContext) throws Exception {
+        String rQuery = runContext.render(query).as(String.class)
+            .orElseThrow(() -> new IllegalArgumentException("'query' is required"));
+        FetchType rFetchType = runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        BoxClient client = client(runContext);
+
+        // Box rejects an empty filter list, so an unset filter must be sent as null
+        java.util.List<String> rExtensions = nullIfEmpty(runContext.render(fileExtensions).asList(String.class));
+        java.util.List<String> rOwners = nullIfEmpty(runContext.render(ownerUserIds).asList(String.class));
+
+        java.util.List<BoxItem> items = new ArrayList<>();
+        long offset = 0;
+        while (true) {
+            var params = new SearchForContentQueryParams.Builder()
+                .query(rQuery)
+                .fileExtensions(rExtensions)
+                .ownerUserIds(rOwners)
+                .limit(rFetchType == FetchType.FETCH_ONE ? 1L : 200L)
+                .offset(offset)
+                .build();
+            var results = client.getSearch().searchForContent(params).getSearchResults();
+
+            results.getEntries().forEach(entry -> items.add(BoxItem.of(entry)));
+            offset += results.getEntries().size();
+            if (results.getEntries().isEmpty() || offset >= results.getTotalCount() || rFetchType == FetchType.FETCH_ONE) {
+                break;
+            }
+        }
+
+        runContext.logger().debug("Found {} Box results for '{}'", items.size(), rQuery);
+        return FetchOutput.of(runContext, rFetchType, items);
     }
 
-    @SuperBuilder
-    @Getter
-    public static class Output implements io.kestra.core.models.tasks.Output {
-        @Schema(title = "Results", description = "Populated when `fetchType` is `FETCH`.")
-        private final java.util.List<BoxItem> rows;
-
-        @Schema(title = "First result", description = "Populated when `fetchType` is `FETCH_ONE`.")
-        private final BoxItem row;
-
-        @Schema(title = "Stored results URI", description = "Populated when `fetchType` is `STORE`.")
-        private final URI uri;
-
-        @Schema(title = "Result count")
-        private final long size;
+    private static java.util.List<String> nullIfEmpty(java.util.List<String> list) {
+        return list == null || list.isEmpty() ? null : list;
     }
 }

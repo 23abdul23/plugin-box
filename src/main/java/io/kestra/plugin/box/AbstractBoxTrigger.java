@@ -4,7 +4,7 @@ import com.box.sdkgen.client.BoxClient;
 import com.google.common.annotations.VisibleForTesting;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
-import io.kestra.core.models.tasks.Task;
+import io.kestra.core.models.triggers.AbstractTrigger;
 import io.kestra.core.runners.RunContext;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.EqualsAndHashCode;
@@ -13,12 +13,13 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
+// Same connection properties as AbstractBoxTask, a trigger cannot extend Task
 @SuperBuilder
 @ToString
-@EqualsAndHashCode
+@EqualsAndHashCode(callSuper = true)
 @Getter
 @NoArgsConstructor
-public abstract class AbstractBoxTask extends Task implements BoxConnectionInterface {
+public abstract class AbstractBoxTrigger extends AbstractTrigger implements BoxConnectionInterface {
 
     @ToString.Exclude
     @Schema(title = "Box client ID")

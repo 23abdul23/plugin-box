@@ -1,5 +1,8 @@
 package io.kestra.plugin.box.folders;
 
+import com.box.sdkgen.managers.folders.CreateFolderRequestBody;
+import com.box.sdkgen.managers.folders.CreateFolderRequestBodyParentField;
+
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -18,7 +21,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-// TODO(you): implement run(). Same shape as Upload's "simple" branch: build a request body, one SDK call.
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)
@@ -63,14 +65,14 @@ public class Create extends AbstractBoxTask implements RunnableTask<Create.Outpu
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        // 1. render parentFolderId (orElse "0") and name (orElseThrow, like fileId in Delete)
-        // 2. BoxClient client = client(runContext);
-        // 3. build the request:
-        //      new CreateFolderRequestBody(rName, new CreateFolderRequestBodyParentField(rParentId))
-        //    both classes are in com.box.sdkgen.managers.folders
-        // 4. FolderFull folder = client.getFolders().createFolder(body);
-        // 5. return Output.builder().folder(BoxItem.of(folder)).build();   (BoxItem.of(Folder) already exists)
-        throw new UnsupportedOperationException("TODO");
+        String rParentFolderId = runContext.render(parentFolderId).as(String.class).orElse("0");
+        String rName = runContext.render(name).as(String.class)
+            .orElseThrow(() -> new IllegalArgumentException("'name' is required"));
+
+        runContext.logger().info("Creating Box folder '{}' in folder {}", rName, rParentFolderId);
+        var body = new CreateFolderRequestBody(rName, new CreateFolderRequestBodyParentField(rParentFolderId));
+
+        return Output.builder().folder(BoxItem.of(client(runContext).getFolders().createFolder(body))).build();
     }
 
     @SuperBuilder

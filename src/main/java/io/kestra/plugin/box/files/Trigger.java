@@ -1,7 +1,16 @@
 package io.kestra.plugin.box.files;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Optional;
+
+import com.box.sdkgen.client.BoxClient;
+import com.box.sdkgen.managers.folders.GetFolderItemsQueryParams;
+import com.box.sdkgen.schemas.item.Item;
+import com.box.sdkgen.schemas.items.Items;
 
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
@@ -9,12 +18,18 @@ import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.conditions.ConditionContext;
 import io.kestra.core.models.executions.Execution;
 import io.kestra.core.models.property.Property;
-import io.kestra.core.models.triggers.AbstractTrigger;
 import io.kestra.core.models.triggers.PollingTriggerInterface;
 import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerOutput;
-
+import io.kestra.core.models.triggers.TriggerService;
 import io.kestra.core.runners.RunContext;
+import io.kestra.core.storages.kv.KVMetadata;
+import io.kestra.core.storages.kv.KVStore;
+import io.kestra.core.storages.kv.KVValue;
+import io.kestra.core.storages.kv.KVValueAndMetadata;
+import io.kestra.plugin.box.AbstractBoxTrigger;
+import io.kestra.plugin.box.models.BoxItem;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -23,10 +38,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-// TODO(you): do this LAST. A trigger extends AbstractTrigger, NOT AbstractBoxTask, so it cannot inherit the
-// connection properties. See "Step 8" in PLAN.md: move clientId/clientSecret/enterpriseId/userId/developerToken/jwtConfig
-// and the client() logic out of AbstractBoxTask into an interface + static helper both classes use.
-// Until then this skeleton only has the trigger-specific properties.
 @SuperBuilder
 @ToString
 @EqualsAndHashCode(callSuper = true)
@@ -34,7 +45,10 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @Schema(
     title = "Trigger on new Box files",
-    description = "Polls a Box folder and starts one execution for each new file. The last seen creation time is kept in the namespace KV Store."
+    description = "Polls a Box folder and starts an execution for a new file. If several files arrived since the last poll, "
+        + "they fire one per poll, oldest first, so none is lost. "
+        + "The position of the last fired file is stored in the namespace KV Store. "
+        + "The first poll only records the current position: files already in the folder do not fire."
 )
 @Plugin(
     examples = {
@@ -62,7 +76,7 @@ import lombok.experimental.SuperBuilder;
         )
     }
 )
-public class Trigger extends AbstractTrigger implements PollingTriggerInterface, TriggerOutput<Trigger.Output> {
+public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterface, TriggerOutput<Trigger.Output> {
 
     @Schema(title = "Folder ID", description = "Folder to watch for new files.")
     @Builder.Default
@@ -76,27 +90,96 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
 
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext context) throws Exception {
-        // 1. RunContext runContext = conditionContext.getRunContext();
         RunContext runContext = conditionContext.getRunContext();
+        String rFolderId = runContext.render(folderId).as(String.class).orElse("0");
 
-        // 2. list the folder like folders.List (marker pagination), keep only entries of type "file"
-        // 3. read the watermark: KVStore kv = runContext.namespaceKv(context.getNamespace());
-        //      Optional<KVValue> last = kv.getValue(key);    key e.g. "box_trigger_" + context.getTriggerId() + "_" + folderId
-        //      parse the stored ISO string with OffsetDateTime.parse; first poll (nothing stored) = "now", so old files do not fire
-        // 4. new files = createdAt strictly after the watermark, sorted by createdAt ascending
-        // 5. write the watermark on EVERY poll, even when no new file:
-        //      kv.put(key, new KVValueAndMetadata(null, newestCreatedAt.toString()));
-        // 6. none new -> return Optional.empty()
-        //    else -> Optional.of(TriggerService.generateExecution(this, conditionContext, context, output))
-        //    Output must expose `name` so that {{ trigger.name }} works in the flow.
-        //    Several new files: simplest is one Output holding the newest file, or emit one execution per poll listing all.
-        // Tip: put steps 3-4 in a plain static method (watermark, items -> newItems) and unit test it without Box.
-        throw new UnsupportedOperationException("TODO");
+        java.util.List<BoxItem> files = listFiles(client(runContext), rFolderId);
+
+        KVStore kv = runContext.namespaceKv(context.getNamespace());
+        String key = "box_trigger_" + context.getTriggerId() + "_" + rFolderId;
+        Optional<Position> last = kv.getValue(key).map(KVValue::value).map(v -> Position.parse((String) v));
+
+        // first poll: remember where we are, do not fire for what is already there
+        if (last.isEmpty()) {
+            // ponytail: empty folder starts at the local clock, a file created by a skewed Box clock just before it is missed
+            Position start = files.stream().map(Position::of).max(Comparator.naturalOrder()).orElse(new Position(Instant.now(), ""));
+            kv.put(key, new KVValueAndMetadata(new KVMetadata(null, (Duration) null), start.format()));
+            return Optional.empty();
+        }
+
+        Optional<BoxItem> next = next(last.get(), files);
+        if (next.isEmpty()) {
+            return Optional.empty();
+        }
+
+        BoxItem file = next.get();
+        kv.put(key, new KVValueAndMetadata(new KVMetadata(null, (Duration) null), Position.of(file).format()));
+        runContext.logger().info("New Box file '{}' ({}) in folder {}", file.getName(), file.getId(), rFolderId);
+
+        Output output = Output.builder()
+            .id(file.getId())
+            .name(file.getName())
+            .size(file.getSize())
+            .createdAt(file.getCreatedAt())
+            .build();
+        return Optional.of(TriggerService.generateExecution(this, conditionContext, context, output));
+    }
+
+    // oldest file strictly after the position
+    static Optional<BoxItem> next(Position after, java.util.List<BoxItem> files) {
+        return files.stream()
+            .filter(f -> f.getCreatedAt() != null)
+            .filter(f -> Position.of(f).compareTo(after) > 0)
+            .min(Comparator.comparing(Position::of));
+    }
+
+    private static java.util.List<BoxItem> listFiles(BoxClient client, String folderId) {
+        java.util.List<BoxItem> files = new ArrayList<>();
+        String marker = null;
+        do {
+            // created_at is not in the default folder-item fields, ask for it
+            var params = new GetFolderItemsQueryParams.Builder()
+                .usemarker(true)
+                .marker(marker)
+                .limit(1000L)
+                .fields(java.util.List.of("id", "name", "type", "size", "created_at"))
+                .build();
+            Items page = client.getFolders().getFolderItems(folderId, params);
+            for (Item item : page.getEntries()) {
+                if (item.isFileFull()) {
+                    files.add(BoxItem.of(item.getFileFull()));
+                }
+            }
+            marker = page.getNextMarker();
+        } while (marker != null && !marker.isEmpty());
+        return files;
     }
 
     @Override
     public Duration getInterval() {
         return interval;
+    }
+
+    // (creation time, id): a total order, so files created in the same second are neither skipped nor repeated
+    record Position(Instant createdAt, String id) implements Comparable<Position> {
+        static Position of(BoxItem file) {
+            return new Position(file.getCreatedAt().toInstant(), file.getId());
+        }
+
+        static Position parse(String stored) {
+            int sep = stored.indexOf('|');
+            return new Position(Instant.parse(stored.substring(0, sep)), stored.substring(sep + 1));
+        }
+
+        String format() {
+            return createdAt + "|" + id;
+        }
+
+        @Override
+        public int compareTo(Position other) {
+            int byTime = createdAt.compareTo(other.createdAt);
+            return byTime != 0 ? byTime : id.compareTo(other.id);
+        }
     }
 
     @SuperBuilder
@@ -107,5 +190,11 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
 
         @Schema(title = "File name")
         private final String name;
+
+        @Schema(title = "File size in bytes")
+        private final Long size;
+
+        @Schema(title = "Creation time")
+        private final OffsetDateTime createdAt;
     }
 }

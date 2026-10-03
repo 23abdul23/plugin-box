@@ -46,7 +46,6 @@ public class BoxItem {
     @PluginProperty(group = "advanced")
     private final String sha1;
 
-    // FolderFull (create/list) extends Folder
     public static BoxItem of(Folder folder) {
         return BoxItem.builder()
             .id(folder.getId())
@@ -69,7 +68,7 @@ public class BoxItem {
         return BoxItem.builder().id(item.getWebLink().getId()).name(item.getWebLink().getName()).type("web_link").build();
     }
 
-    // search result entry: same three cases as a folder listing entry
+    // search result entry: same three cases
     public static BoxItem of(SearchResultItem item) {
         if (item.isFileFull()) {
             return of(item.getFileFull());
@@ -79,7 +78,6 @@ public class BoxItem {
         return BoxItem.builder().id(item.getWebLink().getId()).name(item.getWebLink().getName()).type("web_link").build();
     }
 
-    // FileFull (upload/get) extends File, so one mapper serves every file task
     public static BoxItem of(File file) {
         return BoxItem.builder()
             .id(file.getId())
