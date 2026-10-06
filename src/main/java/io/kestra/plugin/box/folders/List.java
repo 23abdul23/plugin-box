@@ -1,6 +1,5 @@
 package io.kestra.plugin.box.folders;
 
-import java.util.ArrayList;
 
 import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.folders.GetFolderItemsQueryParams;
@@ -77,28 +76,29 @@ public class List extends AbstractBoxTask implements RunnableTask<FetchOutput> {
 
     @Override
     public FetchOutput run(RunContext runContext) throws Exception {
-        String rFolderId = runContext.render(folderId).as(String.class).orElse("0");
-        FetchType rFetchType = runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
-        BoxClient client = client(runContext);
+        var rFolderId = runContext.render(folderId).as(String.class).orElse("0");
+        var rFetchType = runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        var client = client(runContext);
 
-        java.util.List<BoxItem> items = new ArrayList<>();
-        String marker = null;
-        do {
-            // Box returns only id/name/type by default, ask for what BoxItem exposes
-            var params = new GetFolderItemsQueryParams.Builder()
-                .usemarker(true)
-                .marker(marker)
-                .limit(rFetchType == FetchType.FETCH_ONE ? 1L : 1000L)
-                .fields(java.util.List.of("id", "name", "type", "size", "parent", "created_at", "modified_at", "sha1"))
-                .build();
-            Items page = client.getFolders().getFolderItems(rFolderId, params);
-            for (Item item : page.getEntries()) {
-                items.add(BoxItem.of(item));
-            }
-            marker = page.getNextMarker();
-        } while (marker != null && !marker.isEmpty() && rFetchType != FetchType.FETCH_ONE);
+        try (var items = FetchOutput.collector(runContext, rFetchType)) {
+            String marker = null;
+            do {
+                // Box returns only id/name/type by default, ask for what BoxItem exposes
+                var params = new GetFolderItemsQueryParams.Builder()
+                    .usemarker(true)
+                    .marker(marker)
+                    .limit(rFetchType == FetchType.FETCH_ONE ? 1L : 1000L)
+                    .fields(java.util.List.of("id", "name", "type", "size", "parent", "created_at", "modified_at", "sha1"))
+                    .build();
+                var page = client.getFolders().getFolderItems(rFolderId, params);
+                for (Item item : page.getEntries()) {
+                    items.add(BoxItem.of(item));
+                }
+                marker = page.getNextMarker();
+            } while (marker != null && !marker.isEmpty() && rFetchType != FetchType.FETCH_ONE);
 
-        runContext.logger().debug("Found {} items in Box folder {}", items.size(), rFolderId);
-        return FetchOutput.of(runContext, rFetchType, items);
+            runContext.logger().debug("Found {} items in Box folder {}", items.size(), rFolderId);
+            return items.build();
+        }
     }
 }

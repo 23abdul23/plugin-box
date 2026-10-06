@@ -38,7 +38,7 @@ public interface BoxConnectionInterface {
 
         var rJwtConfig = runContext.render(connection.getJwtConfig()).as(String.class);
         if (rJwtConfig.isPresent()) {
-            BoxJWTAuth jwt = new BoxJWTAuth(JWTConfig.fromConfigJsonString(rJwtConfig.get()));
+            var jwt = new BoxJWTAuth(JWTConfig.fromConfigJsonString(rJwtConfig.get()));
             // without a subject the JWT config's own enterprise ID is used
             if (rUserId.isPresent()) {
                 jwt = jwt.withUserSubject(rUserId.get());
@@ -51,7 +51,7 @@ public interface BoxConnectionInterface {
         var rClientId = runContext.render(connection.getClientId()).as(String.class);
         var rClientSecret = runContext.render(connection.getClientSecret()).as(String.class);
         if (rClientId.isPresent() && rClientSecret.isPresent()) {
-            BoxCCGAuth ccg = new BoxCCGAuth(new CCGConfig(rClientId.get(), rClientSecret.get()));
+            var ccg = new BoxCCGAuth(new CCGConfig(rClientId.get(), rClientSecret.get()));
             if (rUserId.isPresent()) {
                 ccg = ccg.withUserSubject(rUserId.get());
             } else if (rEnterpriseId.isPresent()) {

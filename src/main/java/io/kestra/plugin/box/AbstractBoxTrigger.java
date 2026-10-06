@@ -40,12 +40,14 @@ public abstract class AbstractBoxTrigger extends AbstractTrigger implements BoxC
     private Property<String> userId;
 
     @ToString.Exclude
-    @Schema(title = "Developer token", description = "Short-lived token for quick tests. Takes priority over other auth.")
+    @Schema(title = "Developer token", description = """
+        Short-lived token for quick tests. Takes priority over other auth.""")
     @PluginProperty(group = "connection", secret = true)
     private Property<String> developerToken;
 
     @ToString.Exclude
-    @Schema(title = "JWT config JSON", description = "Contents of the JSON config file downloaded from the Box developer console. Used when no developer token is set and no client credentials are set.")
+    @Schema(title = "JWT config JSON", description = """
+        Contents of the JSON config file downloaded from the Box developer console. Used when no developer token is set and no client credentials are set.""")
     @PluginProperty(group = "connection", secret = true)
     private Property<String> jwtConfig;
 

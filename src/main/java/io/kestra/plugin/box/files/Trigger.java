@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 import com.box.sdkgen.client.BoxClient;
@@ -45,10 +46,12 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @Schema(
     title = "Trigger on new Box files",
-    description = "Polls a Box folder and starts an execution for a new file. If several files arrived since the last poll, "
-        + "they fire one per poll, oldest first, so none is lost. "
-        + "The position of the last fired file is stored in the namespace KV Store. "
-        + "The first poll only records the current position: files already in the folder do not fire."
+    description = """
+        Polls a Box folder and starts an execution for a new file. If several files arrived since the last poll, \
+        they fire one per poll, oldest first, so none is lost. \
+        The position of the last fired file is stored in the namespace KV Store, per flow, trigger and folder. \
+        Files are tracked by creation time (created_at): a file moved into the folder that keeps an older created_at is not detected. \
+        The first poll only records the current position: files already in the folder do not fire."""
 )
 @Plugin(
     examples = {
@@ -83,40 +86,51 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
     @PluginProperty(group = "main")
     private Property<String> folderId = Property.ofValue("0");
 
-    @Schema(title = "Polling interval")
+    private static final Duration MIN_INTERVAL = Duration.ofSeconds(5);
+
+    @Schema(
+        title = "Polling interval",
+        description = """
+            Time between two polls of the folder. Defaults to 60 seconds, minimum 5 seconds to stay within Box API rate limits."""
+    )
     @Builder.Default
     @PluginProperty(group = "execution")
     private final Duration interval = Duration.ofSeconds(60);
 
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext context) throws Exception {
-        RunContext runContext = conditionContext.getRunContext();
-        String rFolderId = runContext.render(folderId).as(String.class).orElse("0");
+        if (interval.compareTo(MIN_INTERVAL) < 0) {
+            throw new IllegalArgumentException("interval must be at least " + MIN_INTERVAL + ", got " + interval);
+        }
+        var runContext = conditionContext.getRunContext();
+        var rFolderId = runContext.render(folderId).as(String.class).orElse("0");
 
-        java.util.List<BoxItem> files = listFiles(client(runContext), rFolderId);
+        var files = listFiles(client(runContext), rFolderId);
 
-        KVStore kv = runContext.namespaceKv(context.getNamespace());
-        String key = "box_trigger_" + context.getTriggerId() + "_" + rFolderId;
-        Optional<Position> last = kv.getValue(key).map(KVValue::value).map(v -> Position.parse((String) v));
+        var kv = runContext.namespaceKv(context.getNamespace());
+        // length-prefixed flow and trigger ids: no collision across flows or segment splits
+        var flowId = context.getFlowId();
+        var triggerId = context.getTriggerId();
+        var key = "box_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId.length() + "_" + triggerId + "_" + rFolderId;
+        var last = kv.getValue(key).map(KVValue::value).flatMap(v -> Position.tryParse(String.valueOf(v)));
 
         // first poll: remember where we are, do not fire for what is already there
         if (last.isEmpty()) {
-            // ponytail: empty folder starts at the local clock, a file created by a skewed Box clock just before it is missed
-            Position start = files.stream().map(Position::of).max(Comparator.naturalOrder()).orElse(new Position(Instant.now(), ""));
+            var start = files.stream().map(Position::of).max(Comparator.naturalOrder()).orElse(new Position(Instant.now(), ""));
             kv.put(key, new KVValueAndMetadata(new KVMetadata(null, (Duration) null), start.format()));
             return Optional.empty();
         }
 
-        Optional<BoxItem> next = next(last.get(), files);
+        var next = next(last.get(), files);
         if (next.isEmpty()) {
             return Optional.empty();
         }
 
-        BoxItem file = next.get();
+        var file = next.get();
         kv.put(key, new KVValueAndMetadata(new KVMetadata(null, (Duration) null), Position.of(file).format()));
         runContext.logger().info("New Box file '{}' ({}) in folder {}", file.getName(), file.getId(), rFolderId);
 
-        Output output = Output.builder()
+        var output = Output.builder()
             .id(file.getId())
             .name(file.getName())
             .size(file.getSize())
@@ -126,15 +140,15 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
     }
 
     // oldest file strictly after the position
-    static Optional<BoxItem> next(Position after, java.util.List<BoxItem> files) {
+    static Optional<BoxItem> next(Position after, List<BoxItem> files) {
         return files.stream()
             .filter(f -> f.getCreatedAt() != null)
             .filter(f -> Position.of(f).compareTo(after) > 0)
             .min(Comparator.comparing(Position::of));
     }
 
-    private static java.util.List<BoxItem> listFiles(BoxClient client, String folderId) {
-        java.util.List<BoxItem> files = new ArrayList<>();
+    private static List<BoxItem> listFiles(BoxClient client, String folderId) {
+        var files = new ArrayList<BoxItem>();
         String marker = null;
         do {
             // created_at is not in the default folder-item fields, ask for it
@@ -142,9 +156,9 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
                 .usemarker(true)
                 .marker(marker)
                 .limit(1000L)
-                .fields(java.util.List.of("id", "name", "type", "size", "created_at"))
+                .fields(List.of("id", "name", "type", "size", "created_at"))
                 .build();
-            Items page = client.getFolders().getFolderItems(folderId, params);
+            var page = client.getFolders().getFolderItems(folderId, params);
             for (Item item : page.getEntries()) {
                 if (item.isFileFull()) {
                     files.add(BoxItem.of(item.getFileFull()));
@@ -169,6 +183,15 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
         static Position parse(String stored) {
             int sep = stored.indexOf('|');
             return new Position(Instant.parse(stored.substring(0, sep)), stored.substring(sep + 1));
+        }
+
+        // a corrupted stored value counts as a first poll instead of failing every poll
+        static Optional<Position> tryParse(String stored) {
+            try {
+                return Optional.of(parse(stored));
+            } catch (RuntimeException e) {
+                return Optional.empty();
+            }
         }
 
         String format() {

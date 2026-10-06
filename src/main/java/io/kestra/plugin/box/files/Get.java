@@ -61,12 +61,12 @@ public class Get extends AbstractBoxTask implements RunnableTask<Get.Output> {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String rFileId = runContext.render(fileId).as(String.class)
+        var rFileId = runContext.render(fileId).as(String.class)
             .orElseThrow(() -> new IllegalArgumentException("'fileId' is required"));
 
-        BoxClient client = client(runContext);
+        var client = client(runContext);
         runContext.logger().info("Getting the file with id: '{}'", rFileId);
-        FileFull file = client.getFiles().getFileById(rFileId);
+        var file = client.getFiles().getFileById(rFileId);
         return Output.builder().file(BoxItem.of(file)).build();
     }
 

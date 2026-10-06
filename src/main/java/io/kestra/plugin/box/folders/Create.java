@@ -28,7 +28,8 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @Schema(
     title = "Create a Box folder",
-    description = "Creates a folder inside a parent folder. Fails if a folder with the same name already exists there."
+    description = """
+        Creates a folder inside a parent folder. Fails if a folder with the same name already exists there."""
 )
 @Plugin(
     examples = {
@@ -65,8 +66,8 @@ public class Create extends AbstractBoxTask implements RunnableTask<Create.Outpu
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String rParentFolderId = runContext.render(parentFolderId).as(String.class).orElse("0");
-        String rName = runContext.render(name).as(String.class)
+        var rParentFolderId = runContext.render(parentFolderId).as(String.class).orElse("0");
+        var rName = runContext.render(name).as(String.class)
             .orElseThrow(() -> new IllegalArgumentException("'name' is required"));
 
         runContext.logger().info("Creating Box folder '{}' in folder {}", rName, rParentFolderId);

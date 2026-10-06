@@ -1,6 +1,5 @@
 package io.kestra.plugin.box.search;
 
-import java.util.ArrayList;
 
 import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.search.SearchForContentQueryParams;
@@ -77,38 +76,50 @@ public class Search extends AbstractBoxTask implements RunnableTask<FetchOutput>
     @PluginProperty(group = "processing")
     private Property<FetchType> fetchType = Property.ofValue(FetchType.FETCH);
 
+    private static final long MAX_RESULTS = 10_000L;
+
     @Override
     public FetchOutput run(RunContext runContext) throws Exception {
-        String rQuery = runContext.render(query).as(String.class)
+        var rQuery = runContext.render(query).as(String.class)
             .orElseThrow(() -> new IllegalArgumentException("'query' is required"));
-        FetchType rFetchType = runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
-        BoxClient client = client(runContext);
+        var rFetchType = runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        var client = client(runContext);
 
         // Box rejects an empty filter list, so an unset filter must be sent as null
         java.util.List<String> rExtensions = nullIfEmpty(runContext.render(fileExtensions).asList(String.class));
         java.util.List<String> rOwners = nullIfEmpty(runContext.render(ownerUserIds).asList(String.class));
 
-        java.util.List<BoxItem> items = new ArrayList<>();
-        long offset = 0;
-        while (true) {
-            var params = new SearchForContentQueryParams.Builder()
-                .query(rQuery)
-                .fileExtensions(rExtensions)
-                .ownerUserIds(rOwners)
-                .limit(rFetchType == FetchType.FETCH_ONE ? 1L : 200L)
-                .offset(offset)
-                .build();
-            var results = client.getSearch().searchForContent(params).getSearchResults();
+        try (var items = FetchOutput.collector(runContext, rFetchType)) {
+            long offset = 0;
+            while (true) {
+                // Box rejects offset + limit above 10000
+                long limit = rFetchType == FetchType.FETCH_ONE ? 1L : Math.min(200L, MAX_RESULTS - offset);
+                if (limit <= 0) {
+                    runContext.logger().warn("Box search returns at most {} results, stopping there. Narrow the query with fileExtensions or ownerUserIds to get the rest.", MAX_RESULTS);
+                    break;
+                }
+                var params = new SearchForContentQueryParams.Builder()
+                    .query(rQuery)
+                    .fileExtensions(rExtensions)
+                    .ownerUserIds(rOwners)
+                    .limit(limit)
+                    .offset(offset)
+                    .build();
+                var results = client.getSearch().searchForContent(params).getSearchResults();
 
-            results.getEntries().forEach(entry -> items.add(BoxItem.of(entry)));
-            offset += results.getEntries().size();
-            if (results.getEntries().isEmpty() || offset >= results.getTotalCount() || rFetchType == FetchType.FETCH_ONE) {
-                break;
+                for (var entry : results.getEntries()) {
+                    items.add(BoxItem.of(entry));
+                }
+                offset += results.getEntries().size();
+                var total = results.getTotalCount();
+                if (results.getEntries().isEmpty() || (total != null && offset >= total) || rFetchType == FetchType.FETCH_ONE) {
+                    break;
+                }
             }
-        }
 
-        runContext.logger().debug("Found {} Box results for '{}'", items.size(), rQuery);
-        return FetchOutput.of(runContext, rFetchType, items);
+            runContext.logger().debug("Found {} Box results for '{}'", items.size(), rQuery);
+            return items.build();
+        }
     }
 
     private static java.util.List<String> nullIfEmpty(java.util.List<String> list) {

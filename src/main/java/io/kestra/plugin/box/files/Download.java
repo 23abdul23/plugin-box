@@ -67,21 +67,21 @@ public class Download extends AbstractBoxTask implements RunnableTask<Download.O
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String rFileId = runContext.render(fileId).as(String.class)
+        var rFileId = runContext.render(fileId).as(String.class)
             .orElseThrow(() -> new IllegalArgumentException("'fileId' is required"));
 
-        BoxClient client = client(runContext);
+        var client = client(runContext);
         runContext.logger().info("Downloading Box file {}", rFileId);
 
         // stream to a temp file so the whole file is never held in memory
-        Path tempFile = runContext.workingDir().createTempFile();
+        var tempFile = runContext.workingDir().createTempFile();
         try (OutputStream out = Files.newOutputStream(tempFile)) {
             client.getDownloads().downloadFileToOutputStream(rFileId, out);
         }
 
         // the download call returns no metadata, so fetch it for the stored file's name
-        FileFull metadata = client.getFiles().getFileById(rFileId);
-        URI uri = runContext.storage().putFile(tempFile.toFile(), metadata.getName());
+        var metadata = client.getFiles().getFileById(rFileId);
+        var uri = runContext.storage().putFile(tempFile.toFile(), metadata.getName());
 
         return Output.builder()
             .uri(uri)

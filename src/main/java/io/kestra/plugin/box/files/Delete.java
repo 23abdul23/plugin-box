@@ -60,10 +60,10 @@ public class Delete extends AbstractBoxTask implements RunnableTask<Delete.Outpu
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String rFileId = runContext.render(fileId).as(String.class)
+        var rFileId = runContext.render(fileId).as(String.class)
             .orElseThrow(() -> new IllegalArgumentException("'fileId' is required"));
 
-        BoxClient client = client(runContext);
+        var client = client(runContext);
         runContext.logger().info("Deleting Box file {}", rFileId);
         client.getFiles().deleteFileById(rFileId);
         return Output.builder().fileId(rFileId).build();

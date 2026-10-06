@@ -37,7 +37,8 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @Schema(
     title = "Upload a file to Box",
-    description = "Uploads a file from Kestra internal storage to a Box folder. Files above 50 MB use Box chunked upload automatically."
+    description = """
+        Uploads a file from Kestra internal storage to a Box folder. Files above 50 MB use Box chunked upload automatically."""
 )
 @Plugin(
     examples = {
@@ -87,19 +88,19 @@ public class Upload extends AbstractBoxTask implements RunnableTask<Upload.Outpu
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        URI rFrom = URI.create(runContext.render(from).as(String.class)
+        var rFrom = URI.create(runContext.render(from).as(String.class)
             .orElseThrow(() -> new IllegalArgumentException("'from' is required")));
-        String rFolderId = runContext.render(folderId).as(String.class).orElse("0");
-        String rName = runContext.render(name).as(String.class)
+        var rFolderId = runContext.render(folderId).as(String.class).orElse("0");
+        var rName = runContext.render(name).as(String.class)
             .orElseGet(() -> Path.of(rFrom.getPath()).getFileName().toString());
 
-        Path tempFile = runContext.workingDir().createTempFile();
+        var tempFile = runContext.workingDir().createTempFile();
         try (InputStream in = runContext.storage().getFile(rFrom)) {
             Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
         long size = Files.size(tempFile);
 
-        BoxClient client = client(runContext);
+        var client = client(runContext);
         runContext.logger().info("Uploading '{}' ({} bytes) to Box folder {}", rName, size, rFolderId);
 
         File uploaded;
