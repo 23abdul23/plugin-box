@@ -39,4 +39,13 @@ tasks:
 ## Good to know
 
 - Folder `0` is the root folder. Other folder IDs are the number at the end of the folder's URL in the Box web app.
-- `files.Trigger` fires one execution per poll, oldest new file first. The first poll only records the folder's current state, so files already there do not fire. Its position is kept in the namespace KV Store.
+
+## Trigger behavior
+
+`files.Trigger` polls one folder every `interval` (default 60 seconds, minimum 5 seconds).
+
+- The first poll only records the folder's current state, so files already there do not fire.
+- It fires one execution per poll, oldest new file first. If N files arrive between polls, the backlog takes N intervals to drain.
+- Files are tracked by creation time (`created_at`). A file moved into the folder that keeps an older `created_at` is never detected.
+- The position is kept in the namespace KV Store, per flow, trigger and folder, so two flows watching the same folder do not interfere.
+- Subfolders are not scanned, only files directly in the folder.
