@@ -1,6 +1,7 @@
 package io.kestra.plugin.box.search;
 
 import java.util.List;
+import java.util.stream.LongStream;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -60,8 +61,12 @@ public class SearchTest {
     }
 
     private static SearchResultsResponse page(long total, SearchResultItem... items) {
+        return page(Long.valueOf(total), List.of(items));
+    }
+
+    private static SearchResultsResponse page(Long total, List<SearchResultItem> items) {
         SearchResults results = mock(SearchResults.class);
-        when(results.getEntries()).thenReturn(List.of(items));
+        when(results.getEntries()).thenReturn(items);
         when(results.getTotalCount()).thenReturn(total);
         SearchResultsResponse response = mock(SearchResultsResponse.class);
         when(response.getSearchResults()).thenReturn(results);
@@ -95,6 +100,33 @@ public class SearchTest {
         assertThat(params.getAllValues().get(0).getFileExtensions(), is(List.of("pdf")));
         assertThat(params.getAllValues().get(0).getOffset(), is(0L));
         assertThat(params.getAllValues().get(1).getOffset(), is(1L));
+    }
+
+    @Test
+    void missingTotalCount_stopsOnEmptyPage() throws Exception {
+        var task = task(page((Long) null, List.of(file("1", "a.pdf"))), page((Long) null, List.of())).build();
+
+        FetchOutput output = task.run(runContextFactory.of());
+
+        assertThat(output.getSize(), is(1L));
+        verify(search, times(2)).searchForContent(any(SearchForContentQueryParams.class));
+    }
+
+    @Test
+    void stopsAtBoxOffsetCap() throws Exception {
+        var task = task(page(50_000L)).build();
+        // every call returns as many entries as the requested limit
+        when(search.searchForContent(any(SearchForContentQueryParams.class))).thenAnswer(inv -> {
+            long limit = inv.<SearchForContentQueryParams>getArgument(0).getLimit();
+            return page(50_000L, LongStream.range(0, limit).mapToObj(i -> file("" + i, i + ".pdf")).toList());
+        });
+
+        FetchOutput output = task.run(runContextFactory.of());
+
+        assertThat(output.getSize(), is(10_000L));
+        ArgumentCaptor<SearchForContentQueryParams> params = ArgumentCaptor.forClass(SearchForContentQueryParams.class);
+        verify(search, times(50)).searchForContent(params.capture());
+        params.getAllValues().forEach(p -> assertThat(p.getOffset() + p.getLimit() <= 10_000L, is(true)));
     }
 
     @Test

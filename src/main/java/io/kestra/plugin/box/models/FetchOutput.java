@@ -8,6 +8,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 
 import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
@@ -22,7 +23,7 @@ import lombok.experimental.SuperBuilder;
 @Getter
 public class FetchOutput implements io.kestra.core.models.tasks.Output {
     @Schema(title = "Items", description = "Populated when `fetchType` is `FETCH`.")
-    private final java.util.List<BoxItem> rows;
+    private final List<BoxItem> rows;
 
     @Schema(title = "First item", description = "Populated when `fetchType` is `FETCH_ONE`.")
     private final BoxItem row;
@@ -41,7 +42,7 @@ public class FetchOutput implements io.kestra.core.models.tasks.Output {
     public static class Collector implements Closeable {
         private final RunContext runContext;
         private final FetchType fetchType;
-        private final java.util.List<BoxItem> rows = new ArrayList<>();
+        private final List<BoxItem> rows = new ArrayList<>();
         private final Path tempFile;
         private final OutputStream out;
         private long size;

@@ -108,10 +108,7 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
         var files = listFiles(client(runContext), rFolderId);
 
         var kv = runContext.namespaceKv(context.getNamespace());
-        // length-prefixed flow and trigger ids: no collision across flows or segment splits
-        var flowId = context.getFlowId();
-        var triggerId = context.getTriggerId();
-        var key = "box_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId.length() + "_" + triggerId + "_" + rFolderId;
+        var key = watermarkKey(context.getFlowId(), context.getTriggerId(), rFolderId);
         var last = kv.getValue(key).map(KVValue::value).flatMap(v -> Position.tryParse(String.valueOf(v)));
 
         // first poll: remember where we are, do not fire for what is already there
@@ -139,10 +136,14 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
         return Optional.of(TriggerService.generateExecution(this, conditionContext, context, output));
     }
 
+    // length-prefixed flow and trigger ids: no collision across flows or segment splits
+    static String watermarkKey(String flowId, String triggerId, String folderId) {
+        return "box_watermark_" + flowId.length() + "_" + flowId + "_" + triggerId.length() + "_" + triggerId + "_" + folderId;
+    }
+
     // oldest file strictly after the position
     static Optional<BoxItem> next(Position after, List<BoxItem> files) {
         return files.stream()
-            .filter(f -> f.getCreatedAt() != null)
             .filter(f -> Position.of(f).compareTo(after) > 0)
             .min(Comparator.comparing(Position::of));
     }
@@ -160,7 +161,8 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
                 .build();
             var page = client.getFolders().getFolderItems(folderId, params);
             for (Item item : page.getEntries()) {
-                if (item.isFileFull()) {
+                // a file without created_at has no position, so it can never be ordered
+                if (item.isFileFull() && item.getFileFull().getCreatedAt() != null) {
                     files.add(BoxItem.of(item.getFileFull()));
                 }
             }

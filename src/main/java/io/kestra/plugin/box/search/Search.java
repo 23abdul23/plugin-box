@@ -1,5 +1,6 @@
 package io.kestra.plugin.box.search;
 
+import java.util.List;
 
 import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.search.SearchForContentQueryParams;
@@ -65,11 +66,11 @@ public class Search extends AbstractBoxTask implements RunnableTask<FetchOutput>
 
     @Schema(title = "File extensions", description = "Only return files with these extensions, e.g. `pdf`, `csv`.")
     @PluginProperty(group = "advanced")
-    private Property<java.util.List<String>> fileExtensions;
+    private Property<List<String>> fileExtensions;
 
     @Schema(title = "Owner user IDs", description = "Only return content owned by these Box users.")
     @PluginProperty(group = "advanced")
-    private Property<java.util.List<String>> ownerUserIds;
+    private Property<List<String>> ownerUserIds;
 
     @Schema(title = "Fetch strategy", description = "`FETCH_ONE`, `FETCH` (default) or `STORE`, same as `folders.List`.")
     @Builder.Default
@@ -86,8 +87,8 @@ public class Search extends AbstractBoxTask implements RunnableTask<FetchOutput>
         var client = client(runContext);
 
         // Box rejects an empty filter list, so an unset filter must be sent as null
-        java.util.List<String> rExtensions = nullIfEmpty(runContext.render(fileExtensions).asList(String.class));
-        java.util.List<String> rOwners = nullIfEmpty(runContext.render(ownerUserIds).asList(String.class));
+        List<String> rExtensions = nullIfEmpty(runContext.render(fileExtensions).asList(String.class));
+        List<String> rOwners = nullIfEmpty(runContext.render(ownerUserIds).asList(String.class));
 
         try (var items = FetchOutput.collector(runContext, rFetchType)) {
             long offset = 0;
@@ -122,7 +123,7 @@ public class Search extends AbstractBoxTask implements RunnableTask<FetchOutput>
         }
     }
 
-    private static java.util.List<String> nullIfEmpty(java.util.List<String> list) {
+    private static List<String> nullIfEmpty(List<String> list) {
         return list == null || list.isEmpty() ? null : list;
     }
 }

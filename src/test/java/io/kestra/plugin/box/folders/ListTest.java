@@ -116,6 +116,23 @@ public class ListTest {
     }
 
     @Test
+    void store_streamsEveryPageInOrder() throws Exception {
+        RunContext runContext = runContextFactory.of();
+        var task = task(page("m2", file("1", "a.txt"), file("2", "b.txt")), page(null, file("3", "c.txt")))
+            .fetchType(Property.ofValue(FetchType.STORE))
+            .build();
+
+        FetchOutput output = task.run(runContext);
+
+        assertThat(output.getSize(), is(3L));
+        assertThat(output.getRows(), nullValue());
+        try (var in = runContext.storage().getFile(output.getUri())) {
+            var rows = FileSerde.readAll(new java.io.BufferedInputStream(in), Map.class).collectList().block();
+            assertThat(rows.stream().map(r -> r.get("name")).toList(), is(java.util.List.of("a.txt", "b.txt", "c.txt")));
+        }
+    }
+
+    @Test
     void store() throws Exception {
         RunContext runContext = runContextFactory.of();
         var task = task(page(null, file("1", "a.txt"))).fetchType(Property.ofValue(FetchType.STORE)).build();

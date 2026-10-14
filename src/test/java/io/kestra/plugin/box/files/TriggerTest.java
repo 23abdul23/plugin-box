@@ -1,5 +1,6 @@
 package io.kestra.plugin.box.files;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -30,7 +31,9 @@ import lombok.experimental.SuperBuilder;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -95,6 +98,35 @@ public class TriggerTest {
         assertThat(Trigger.Position.parse(position.format()), is(position));
     }
 
+    @Test
+    void watermarkKey_isDistinctPerFlowAndSegmentSplit() {
+        var base = Trigger.watermarkKey("flow_a", "on_new_file", "123");
+
+        assertThat(Trigger.watermarkKey("flow_b", "on_new_file", "123"), not(base));
+        assertThat(Trigger.watermarkKey("flow_a", "on_new_file", "456"), not(base));
+        // same joined text, different split between flow and trigger
+        assertThat(Trigger.watermarkKey("ab", "c", "1"), not(Trigger.watermarkKey("a", "bc", "1")));
+    }
+
+    @Test
+    void tryParse_corruptedValueIsEmpty() {
+        assertThat(Trigger.Position.tryParse("garbage").isPresent(), is(false));
+        assertThat(Trigger.Position.tryParse("").isPresent(), is(false));
+        assertThat(Trigger.Position.tryParse("not-a-date|id").isPresent(), is(false));
+        assertThat(Trigger.Position.tryParse(at(10).toInstant() + "|id").isPresent(), is(true));
+    }
+
+    @Test
+    void evaluate_rejectsIntervalBelowMinimum() {
+        var trigger = FakeTrigger.builder()
+            .id("box-" + UUID.randomUUID())
+            .type(Trigger.class.getName())
+            .interval(Duration.ofSeconds(1))
+            .build();
+
+        assertThrows(IllegalArgumentException.class, () -> trigger.evaluate(null, null));
+    }
+
     private Item fileItem(String id, int second) {
         FileFull file = mock(FileFull.class);
         when(file.getId()).thenReturn(id);
@@ -110,6 +142,30 @@ public class TriggerTest {
         Items page = mock(Items.class);
         when(page.getEntries()).thenReturn(List.of(items));
         when(folders.getFolderItems(eq("123"), any(GetFolderItemsQueryParams.class))).thenReturn(page);
+    }
+
+    @Test
+    void evaluate_ignoresFileWithoutCreatedAt() throws Exception {
+        FoldersManager folders = mock(FoldersManager.class);
+        BoxClient client = mock(BoxClient.class);
+        when(client.getFolders()).thenReturn(folders);
+        var trigger = FakeTrigger.builder()
+            .id("box-" + UUID.randomUUID())
+            .type(Trigger.class.getName())
+            .fakeClient(client)
+            .folderId(Property.ofValue("123"))
+            .build();
+        var context = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        // a file with no created_at has no position: the first poll must not throw
+        Item undated = mock(Item.class);
+        when(undated.isFileFull()).thenReturn(true);
+        when(undated.getFileFull()).thenReturn(mock(FileFull.class));
+        folderContains(folders, undated, fileItem("old", 10));
+        assertThat(trigger.evaluate(context.getKey(), context.getValue()).isPresent(), is(false));
+
+        folderContains(folders, undated, fileItem("old", 10), fileItem("new", 20));
+        assertThat(trigger.evaluate(context.getKey(), context.getValue()).isPresent(), is(true));
     }
 
     @Test
