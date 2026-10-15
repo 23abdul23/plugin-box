@@ -3,7 +3,6 @@ package io.kestra.plugin.box.folders;
 
 import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.folders.GetFolderItemsQueryParams;
-import com.box.sdkgen.schemas.item.Item;
 import com.box.sdkgen.schemas.items.Items;
 
 import io.kestra.core.models.annotations.Example;
@@ -91,7 +90,7 @@ public class List extends AbstractBoxTask implements RunnableTask<FetchOutput> {
                     .fields(java.util.List.of("id", "name", "type", "size", "parent", "created_at", "modified_at", "sha1"))
                     .build();
                 var page = client.getFolders().getFolderItems(rFolderId, params);
-                for (Item item : page.getEntries()) {
+                for (var item : page.getEntries()) {
                     items.add(BoxItem.of(item));
                 }
                 marker = page.getNextMarker();

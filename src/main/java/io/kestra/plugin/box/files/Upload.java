@@ -98,7 +98,7 @@ public class Upload extends AbstractBoxTask implements RunnableTask<Upload.Outpu
         try (InputStream in = runContext.storage().getFile(rFrom)) {
             Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
-        long size = Files.size(tempFile);
+        var size = Files.size(tempFile);
 
         var client = client(runContext);
         runContext.logger().info("Uploading '{}' ({} bytes) to Box folder {}", rName, size, rFolderId);

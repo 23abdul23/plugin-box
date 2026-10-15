@@ -10,7 +10,6 @@ import java.util.Optional;
 
 import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.folders.GetFolderItemsQueryParams;
-import com.box.sdkgen.schemas.item.Item;
 import com.box.sdkgen.schemas.items.Items;
 
 import io.kestra.core.models.annotations.Example;
@@ -160,7 +159,7 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
                 .fields(List.of("id", "name", "type", "size", "created_at"))
                 .build();
             var page = client.getFolders().getFolderItems(folderId, params);
-            for (Item item : page.getEntries()) {
+            for (var item : page.getEntries()) {
                 // a file without created_at has no position, so it can never be ordered
                 if (item.isFileFull() && item.getFileFull().getCreatedAt() != null) {
                     files.add(BoxItem.of(item.getFileFull()));
@@ -183,7 +182,7 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
         }
 
         static Position parse(String stored) {
-            int sep = stored.indexOf('|');
+            var sep = stored.indexOf('|');
             return new Position(Instant.parse(stored.substring(0, sep)), stored.substring(sep + 1));
         }
 
@@ -202,7 +201,7 @@ public class Trigger extends AbstractBoxTrigger implements PollingTriggerInterfa
 
         @Override
         public int compareTo(Position other) {
-            int byTime = createdAt.compareTo(other.createdAt);
+            var byTime = createdAt.compareTo(other.createdAt);
             return byTime != 0 ? byTime : id.compareTo(other.id);
         }
     }

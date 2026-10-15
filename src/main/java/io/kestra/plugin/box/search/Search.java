@@ -87,14 +87,14 @@ public class Search extends AbstractBoxTask implements RunnableTask<FetchOutput>
         var client = client(runContext);
 
         // Box rejects an empty filter list, so an unset filter must be sent as null
-        List<String> rExtensions = nullIfEmpty(runContext.render(fileExtensions).asList(String.class));
-        List<String> rOwners = nullIfEmpty(runContext.render(ownerUserIds).asList(String.class));
+        var rExtensions = nullIfEmpty(runContext.render(fileExtensions).asList(String.class));
+        var rOwners = nullIfEmpty(runContext.render(ownerUserIds).asList(String.class));
 
         try (var items = FetchOutput.collector(runContext, rFetchType)) {
             long offset = 0;
             while (true) {
                 // Box rejects offset + limit above 10000
-                long limit = rFetchType == FetchType.FETCH_ONE ? 1L : Math.min(200L, MAX_RESULTS - offset);
+                var limit = rFetchType == FetchType.FETCH_ONE ? 1L : Math.min(200L, MAX_RESULTS - offset);
                 if (limit <= 0) {
                     runContext.logger().warn("Box search returns at most {} results, stopping there. Narrow the query with fileExtensions or ownerUserIds to get the rest.", MAX_RESULTS);
                     break;
