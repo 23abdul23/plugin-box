@@ -40,9 +40,20 @@ tasks:
 
 - Folder `0` is the root folder. Other folder IDs are the number at the end of the folder's URL in the Box web app.
 
-## Trigger behavior
+## Triggers
 
-`files.Trigger` polls one folder every `interval` (default 60 seconds, minimum 5 seconds).
+### `files.Trigger`
+
+Polls one folder and starts an execution when a new file lands in it.
+
+Key properties, besides the connection properties above:
+
+- `folderId`: the folder to watch (default `0`, the root folder).
+- `interval`: time between polls (default 60 seconds, minimum 5 seconds).
+
+Outputs, available in the flow as `{{ trigger.* }}`: `id`, `name`, `size` and `createdAt` of the file that fired.
+
+Behavior:
 
 - The first poll only records the folder's current state, so files already there do not fire.
 - It fires one execution per poll, oldest new file first. If N files arrive between polls, the backlog takes N intervals to drain.

@@ -1,5 +1,6 @@
 package io.kestra.plugin.box.folders;
 
+import java.io.BufferedInputStream;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -127,7 +128,7 @@ public class ListTest {
         assertThat(output.getSize(), is(3L));
         assertThat(output.getRows(), nullValue());
         try (var in = runContext.storage().getFile(output.getUri())) {
-            var rows = FileSerde.readAll(new java.io.BufferedInputStream(in), Map.class).collectList().block();
+            var rows = FileSerde.readAll(new BufferedInputStream(in), Map.class).collectList().block();
             assertThat(rows.stream().map(r -> r.get("name")).toList(), is(java.util.List.of("a.txt", "b.txt", "c.txt")));
         }
     }
@@ -141,7 +142,7 @@ public class ListTest {
 
         assertThat(output.getSize(), is(1L));
         try (var in = runContext.storage().getFile(output.getUri())) {
-            var rows = FileSerde.readAll(new java.io.BufferedInputStream(in), Map.class).collectList().block();
+            var rows = FileSerde.readAll(new BufferedInputStream(in), Map.class).collectList().block();
             assertThat(rows.getFirst().get("name"), is("a.txt"));
         }
     }
