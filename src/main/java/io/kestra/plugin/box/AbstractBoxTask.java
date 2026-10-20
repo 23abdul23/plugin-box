@@ -30,11 +30,13 @@ public abstract class AbstractBoxTask extends Task implements BoxConnectionInter
     @PluginProperty(group = "connection", secret = true)
     private Property<String> clientSecret;
 
-    @Schema(title = "Enterprise ID", description = "Use with CCG to act as the app's service account.")
+    @Schema(title = "Enterprise ID", description = """
+        Use with CCG to act as the app's service account.""")
     @PluginProperty(group = "connection")
     private Property<String> enterpriseId;
 
-    @Schema(title = "User ID", description = "Use with CCG to act as a specific user instead of the enterprise.")
+    @Schema(title = "User ID", description = """
+        Use with CCG to act as a specific user instead of the enterprise.""")
     @PluginProperty(group = "connection")
     private Property<String> userId;
 

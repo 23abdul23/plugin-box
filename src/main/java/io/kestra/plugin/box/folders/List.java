@@ -65,7 +65,10 @@ public class List extends AbstractBoxTask implements RunnableTask<FetchOutput> {
 
     @Schema(
         title = "Fetch strategy",
-        description = "`FETCH_ONE`: first item only.\n`FETCH` (default): all items in memory.\n`STORE`: write items to Kestra storage and return the URI."
+        description = """
+            `FETCH_ONE`: first item only.
+            `FETCH` (default): all items in memory.
+            `STORE`: write items to Kestra storage and return the URI."""
     )
     @Builder.Default
     @PluginProperty(group = "processing")

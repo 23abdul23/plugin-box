@@ -71,7 +71,13 @@ public class Search extends AbstractBoxTask implements RunnableTask<FetchOutput>
     @PluginProperty(group = "advanced")
     private Property<List<String>> ownerUserIds;
 
-    @Schema(title = "Fetch strategy", description = "`FETCH_ONE`, `FETCH` (default) or `STORE`, same as `folders.List`.")
+    @Schema(
+        title = "Fetch strategy",
+        description = """
+            `FETCH_ONE`: first result only.
+            `FETCH` (default): all results in memory.
+            `STORE`: write results to Kestra storage and return the URI."""
+    )
     @Builder.Default
     @PluginProperty(group = "processing")
     private Property<FetchType> fetchType = Property.ofValue(FetchType.FETCH);
