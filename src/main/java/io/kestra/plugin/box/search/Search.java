@@ -2,7 +2,6 @@ package io.kestra.plugin.box.search;
 
 import java.util.List;
 
-import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.search.SearchForContentQueryParams;
 
 import io.kestra.core.models.annotations.Example;

@@ -1,7 +1,5 @@
 package io.kestra.plugin.box.files;
 
-import com.box.sdkgen.client.BoxClient;
-import com.box.sdkgen.schemas.filefull.FileFull;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;

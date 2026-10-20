@@ -1,9 +1,7 @@
 package io.kestra.plugin.box.folders;
 
 
-import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.folders.GetFolderItemsQueryParams;
-import com.box.sdkgen.schemas.items.Items;
 
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;

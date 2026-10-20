@@ -3,10 +3,6 @@ package io.kestra.plugin.box.files;
 import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Files;
-import java.nio.file.Path;
-
-import com.box.sdkgen.client.BoxClient;
-import com.box.sdkgen.schemas.filefull.FileFull;
 
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;

@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-import com.box.sdkgen.client.BoxClient;
 import com.box.sdkgen.managers.uploads.UploadFileRequestBody;
 import com.box.sdkgen.managers.uploads.UploadFileRequestBodyAttributesField;
 import com.box.sdkgen.managers.uploads.UploadFileRequestBodyAttributesParentField;
